@@ -21,18 +21,23 @@
 #include <SPI.h>
 #include "note.h"
 
+#define ARRAY_LENGTH(array) (sizeof((array))/sizeof((array)[0]))
+
 #define DAC1_PIN  8
 #define DAC2_PIN  9
 #define DAC_CHANNEL_A 0x1000
 #define DAC_CHANNEL_B 0x9000
 #define DAC_GAIN 0x2000
-#define NOTE_SF 47.069f //FIXME naming: This value can be tuned if CV output isn't exactly 1V/octave
+#define DAC_DATA_BITS_MASK 0x0FFF
+#define DAC_SPEED_LIMIT 8000000
+
+//This value can be tuned if CV output isn't exactly 1V/octave
+#define NOTE_2_MILLIVOLTS_FACTOR 47.069f
 
 #define GATE1_PIN A1
 #define GATE2_PIN A2
 #define GATE3_PIN A3
 #define GATE4_PIN A4
-#define GATE_OR_PIN A5
 
 Note notes[] = {
     {GATE1_PIN, DAC1_PIN, DAC_CHANNEL_A, 0, false},
@@ -42,15 +47,12 @@ Note notes[] = {
 };
 
 void setup() {
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < ARRAY_LENGTH(notes); i++) {
         pinMode(notes[i].gatePin, OUTPUT);
         digitalWrite(notes[i].gatePin,LOW);
         pinMode(notes[i].dacPin, OUTPUT);
         digitalWrite(notes[i].dacPin,HIGH);
     }
-
-    pinMode(GATE_OR_PIN, OUTPUT);
-    digitalWrite(GATE_OR_PIN, LOW);
 
     SPI.begin();
 
@@ -74,22 +76,20 @@ void loop() {
 
 void startNote(Note note) {
     note.notePlayed = true;
-    digitalWrite(note.gatePin, HIGH);
-    digitalWrite(GATE_OR_PIN, HIGH);
 
+    digitalWrite(note.gatePin, HIGH);
     applyNoteCV(note);
 }
 
 inline void applyNoteCV(Note note)
 {
-    //FIXME no magic here, but command byte and volts seperate
-    unsigned int noteMilliVolts = (unsigned int) ((float) note.midiNote * NOTE_SF + 0.5);
+    unsigned int noteMilliVolts = (unsigned int) ((float) note.midiNote * NOTE_2_MILLIVOLTS_FACTOR + 0.5);
 
     unsigned int command = note.dacChannel;
     command |= DAC_GAIN;
-    command |= (noteMilliVolts & 0x0FFF);
+    command |= (noteMilliVolts & DAC_DATA_BITS_MASK);
 
-    SPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0));
+    SPI.beginTransaction(SPISettings(DAC_SPEED_LIMIT, MSBFIRST, SPI_MODE0));
     digitalWrite(note.dacPin,LOW);
     SPI.transfer(command>>8);
     SPI.transfer(command&0xFF);
@@ -99,20 +99,6 @@ inline void applyNoteCV(Note note)
 
 void stopNote(Note note) {
     note.notePlayed = false;
-    digitalWrite(note.gatePin, LOW);
-    if(isLastNote())
-    {
-        digitalWrite(GATE_OR_PIN, LOW);
-    }
-}
 
-bool isLastNote()
-{
-    for (int i = 0; i < 4; i++) {
-        if(notes[i].notePlayed)
-        {
-            return false;
-        }
-    }
-    return true;
+    digitalWrite(note.gatePin, LOW);
 }
