@@ -19,6 +19,7 @@
  */
 
 #include <SPI.h>
+#include <MIDI.h>
 #include "note.h"
 
 #define ARRAY_LENGTH(array) (sizeof((array))/sizeof((array)[0]))
@@ -33,11 +34,16 @@
 
 //This value can be tuned if CV output isn't exactly 1V/octave
 #define NOTE_2_MILLIVOLTS_FACTOR 47.069f
+// Midi message: A0 = 21, Top Note (88) = 108
+#define MIDI_MSG_TO_NOTE_INDEX 21
+#define MAXIMUM_NUMBER_OF_KEYS 88
 
 #define GATE1_PIN A1
 #define GATE2_PIN A2
 #define GATE3_PIN A3
 #define GATE4_PIN A4
+
+MIDI_CREATE_DEFAULT_INSTANCE();
 
 Note notes[] = {
     {GATE1_PIN, DAC1_PIN, DAC_CHANNEL_A, 0, false},
@@ -47,38 +53,61 @@ Note notes[] = {
 };
 
 void setup() {
+    setupNotePins();
+
+    SPI.begin();
+    MIDI.begin(MIDI_CHANNEL_OMNI);
+}
+
+inline void setupNotePins() {
     for (int i = 0; i < ARRAY_LENGTH(notes); i++) {
         pinMode(notes[i].gatePin, OUTPUT);
         digitalWrite(notes[i].gatePin,LOW);
         pinMode(notes[i].dacPin, OUTPUT);
         digitalWrite(notes[i].dacPin,HIGH);
     }
-
-    SPI.begin();
-
-    //FIXME  MIDI.begin(MIDI_CHANNEL_OMNI);
 }
 
 void loop() {
-    notes[0].midiNote = 8;
-    startNote(notes[0]);
-    delay(2000);
-    notes[1].midiNote = 40;
-    startNote(notes[1]);
-    delay(2000);
 
-    notes[0].midiNote = 87;
-    stopNote(notes[0]);
-    stopNote(notes[1]);
-    delay(2000);
+    if (MIDI.read()) {
+        byte type = MIDI.getType();
+        int noteMsg = MIDI.getData1() - MIDI_MSG_TO_NOTE_INDEX;
+        switch (type) {
+            case midi::NoteOn:
+                if (correctNotePlayed(noteMsg)) {
+                    playNote(noteMsg);
+                }
+                break;
+            case midi::NoteOff:
+                stopNote(noteMsg);
+                break;
+        }
+    }
 }
 
+inline bool correctNotePlayed(int noteMsg) {
+    return noteMsg > 0 || noteMsg < MAXIMUM_NUMBER_OF_KEYS;
+}
 
-void startNote(Note note) {
-    note.notePlayed = true;
+void playNote(int noteMsg) {
+    Note noteToPlay = getFirstAvailableNote();
+    noteToPlay.midiNote = noteMsg;
+    noteToPlay.notePlayed = true;
 
-    digitalWrite(note.gatePin, HIGH);
-    applyNoteCV(note);
+    digitalWrite(noteToPlay.gatePin, HIGH);
+    applyNoteCV(noteToPlay);
+}
+
+Note getFirstAvailableNote()
+{
+    for(int i=0; i<ARRAY_LENGTH(notes); i++) {
+        if(!notes[i].notePlayed)
+        {
+            return notes[i];
+        }
+    }
+    return notes[0];
 }
 
 inline void applyNoteCV(Note note)
@@ -97,8 +126,13 @@ inline void applyNoteCV(Note note)
     SPI.endTransaction();
 }
 
-void stopNote(Note note) {
-    note.notePlayed = false;
-
-    digitalWrite(note.gatePin, LOW);
+void stopNote(int noteMsg)
+{
+    for(int i=0; i<ARRAY_LENGTH(notes); i++) {
+        if(notes[i].midiNote == noteMsg && notes[i].notePlayed)
+        {
+            notes[i].notePlayed = false;
+            digitalWrite(notes[i].gatePin, LOW);
+        }
+    }
 }
