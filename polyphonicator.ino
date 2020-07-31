@@ -56,7 +56,10 @@ void setup() {
     setupNotePins();
 
     SPI.begin();
+    
     MIDI.begin(MIDI_CHANNEL_OMNI);
+    MIDI.setHandleNoteOn(handleNoteOn);
+    MIDI.setHandleNoteOff(handleNoteOff);
 }
 
 inline void setupNotePins() {
@@ -69,20 +72,17 @@ inline void setupNotePins() {
 }
 
 void loop() {
+  MIDI.read();
+}
 
-    if (MIDI.read()) {
-        byte type = MIDI.getType();
-        int noteMsg = MIDI.getData1() - MIDI_MSG_TO_NOTE_INDEX;
-        switch (type) {
-            case midi::NoteOn:
-                if (correctNotePlayed(noteMsg)) {
-                    playNote(noteMsg);
-                }
-                break;
-            case midi::NoteOff:
-                stopNote(noteMsg);
-                break;
-        }
+void handleNoteOn(byte channel, byte noteMsg, byte velocity) {
+    if (correctNotePlayed(noteMsg)) {
+        int noteIndex = getFirstAvailableNoteIndex();
+        notes[noteIndex].midiNote = noteMsg;
+        notes[noteIndex].notePlayed = true;
+
+        digitalWrite(notes[noteIndex].gatePin, HIGH);
+        applyNoteCV(notes[noteIndex]);
     }
 }
 
@@ -90,24 +90,15 @@ inline bool correctNotePlayed(int noteMsg) {
     return noteMsg > 0 || noteMsg < MAXIMUM_NUMBER_OF_KEYS;
 }
 
-void playNote(int noteMsg) {
-    Note noteToPlay = getFirstAvailableNote();
-    noteToPlay.midiNote = noteMsg;
-    noteToPlay.notePlayed = true;
-
-    digitalWrite(noteToPlay.gatePin, HIGH);
-    applyNoteCV(noteToPlay);
-}
-
-Note getFirstAvailableNote()
+int getFirstAvailableNoteIndex()
 {
     for(int i=0; i<ARRAY_LENGTH(notes); i++) {
         if(!notes[i].notePlayed)
         {
-            return notes[i];
+            return i;
         }
     }
-    return notes[0];
+    return 0;
 }
 
 inline void applyNoteCV(Note note)
@@ -126,13 +117,12 @@ inline void applyNoteCV(Note note)
     SPI.endTransaction();
 }
 
-void stopNote(int noteMsg)
-{
+void handleNoteOff(byte channel, byte noteMsg, byte velocity) {
     for(int i=0; i<ARRAY_LENGTH(notes); i++) {
         if(notes[i].midiNote == noteMsg && notes[i].notePlayed)
         {
-            notes[i].notePlayed = false;
-            digitalWrite(notes[i].gatePin, LOW);
+           notes[i].notePlayed = false;
+           digitalWrite(notes[i].gatePin, LOW);
         }
     }
 }
