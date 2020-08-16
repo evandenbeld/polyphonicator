@@ -7,6 +7,10 @@ Arduino converter for midi to 4 channel polyphonic control voltages.
 Inspired by [midi2cv](https://github.com/elkayem/midi2cv/) by Larry McGovern.
 
 ## Hardware
+### Schematic
+![alt text](hardware/schematic_polyphonicator.png "Polyphonicator a.k.a. Polyp")
+### Bom
+[BOM](hardware/BOM_polyphonicator.csv)
 
 ## Software
 [Arduino sketch](polyphonicator.ino)
