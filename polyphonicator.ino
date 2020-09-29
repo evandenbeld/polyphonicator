@@ -38,10 +38,12 @@
 #define MIDI_MSG_TO_NOTE_INDEX 21
 #define MAXIMUM_NUMBER_OF_KEYS 88
 
-#define GATE1_PIN A1
-#define GATE2_PIN A2
-#define GATE3_PIN A3
-#define GATE4_PIN A4
+#define GATE1_PIN 10
+#define GATE2_PIN 7
+#define GATE3_PIN 6
+#define GATE4_PIN 5
+#define NOTE_PRIORITY_PIN_1 A0
+#define NOTE_PRIORITY_PIN_2 A2
 
 MIDI_CREATE_DEFAULT_INSTANCE();
 
@@ -54,6 +56,7 @@ Note notes[] = {
 
 void setup() {
     setupNotePins();
+    setupPriorityPins();
 
     SPI.begin();
     
@@ -71,13 +74,21 @@ inline void setupNotePins() {
     }
 }
 
+inline void setupPriorityPins() {
+    pinMode(NOTE_PRIORITY_PIN_1, INPUT_PULLUP);
+    pinMode(NOTE_PRIORITY_PIN_2, INPUT_PULLUP);
+}
+
 void loop() {
   MIDI.read();
 }
 
 void handleNoteOn(byte channel, byte noteMsg, byte velocity) {
     if (correctNotePlayed(noteMsg)) {
-        int noteIndex = getFirstAvailableNoteIndex();
+        int noteIndex = getNoteIndex();
+        if(noteIndex == -1) {
+            return;
+        }
         notes[noteIndex].midiNote = noteMsg;
         notes[noteIndex].notePlayed = true;
 
@@ -90,7 +101,7 @@ inline bool correctNotePlayed(int noteMsg) {
     return noteMsg > 0 || noteMsg < MAXIMUM_NUMBER_OF_KEYS;
 }
 
-int getFirstAvailableNoteIndex()
+int getNoteIndex()
 {
     for(int i=0; i<ARRAY_LENGTH(notes); i++) {
         if(!notes[i].notePlayed)
@@ -98,7 +109,22 @@ int getFirstAvailableNoteIndex()
             return i;
         }
     }
-    return 0;
+    return getUnavailableNoteIndexByPriority();
+}
+
+int getUnavailableNoteIndexByPriority()
+{
+    bool switchUp = digitalRead(NOTE_PRIORITY_PIN_1);
+    bool switchDown = digitalRead(NOTE_PRIORITY_PIN_2);
+
+    if(switchUp && switchDown) {
+       return -1;
+    }
+    if(!switchUp && switchDown) {
+       return 0;
+    }
+
+    return ARRAY_LENGTH(notes) -1;
 }
 
 inline void applyNoteCV(Note note)
