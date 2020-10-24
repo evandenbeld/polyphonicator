@@ -3,5 +3,4 @@ typedef struct Note {
     byte dacPin;
     int dacChannel;
     int midiNote;
-    bool notePlayed;
 } Note;

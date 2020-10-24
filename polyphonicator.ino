@@ -22,13 +22,11 @@
 #include <MIDI.h>
 #include "note.h"
 
-#define ARRAY_LENGTH(array) (sizeof((array))/sizeof((array)[0]))
-
-#define DAC1_PIN  8
-#define DAC2_PIN  9
+#define DAC1_PIN  9
+#define DAC2_PIN  8
 #define DAC_CHANNEL_A 0x1000
 #define DAC_CHANNEL_B 0x9000
-#define DAC_GAIN 0x2000
+#define DAC_GAIN 0x0000
 #define DAC_DATA_BITS_MASK 0x0FFF
 #define DAC_SPEED_LIMIT 8000000
 
@@ -48,10 +46,10 @@
 MIDI_CREATE_DEFAULT_INSTANCE();
 
 Note notes[] = {
-    {GATE1_PIN, DAC1_PIN, DAC_CHANNEL_A, 0, false},
-    {GATE2_PIN, DAC1_PIN, DAC_CHANNEL_B, 0, false},
-    {GATE3_PIN, DAC2_PIN, DAC_CHANNEL_A, 0, false},
-    {GATE4_PIN, DAC2_PIN, DAC_CHANNEL_B, 0, false}
+    {GATE1_PIN, DAC1_PIN, DAC_CHANNEL_A, 0},
+    {GATE2_PIN, DAC1_PIN, DAC_CHANNEL_B, 0},
+    {GATE3_PIN, DAC2_PIN, DAC_CHANNEL_A, 0},
+    {GATE4_PIN, DAC2_PIN, DAC_CHANNEL_B, 0}
 };
 
 void setup() {
@@ -66,7 +64,7 @@ void setup() {
 }
 
 inline void setupNotePins() {
-    for (int i = 0; i < ARRAY_LENGTH(notes); i++) {
+    for (int i = 0; i < 4; i++) {
         pinMode(notes[i].gatePin, OUTPUT);
         digitalWrite(notes[i].gatePin,LOW);
         pinMode(notes[i].dacPin, OUTPUT);
@@ -84,13 +82,13 @@ void loop() {
 }
 
 void handleNoteOn(byte channel, byte noteMsg, byte velocity) {
-    if (correctNotePlayed(noteMsg)) {
+    byte note = noteMsg - MIDI_MSG_TO_NOTE_INDEX;
+    if (correctNotePlayed(note)) {
         int noteIndex = getNoteIndex();
         if(noteIndex == -1) {
             return;
         }
-        notes[noteIndex].midiNote = noteMsg;
-        notes[noteIndex].notePlayed = true;
+        notes[noteIndex].midiNote = note;
 
         digitalWrite(notes[noteIndex].gatePin, HIGH);
         applyNoteCV(notes[noteIndex]);
@@ -103,8 +101,8 @@ inline bool correctNotePlayed(int noteMsg) {
 
 int getNoteIndex()
 {
-    for(int i=0; i<ARRAY_LENGTH(notes); i++) {
-        if(!notes[i].notePlayed)
+    for(int i=0; i<4; i++) {
+        if(notes[i].midiNote == 0)
         {
             return i;
         }
@@ -124,11 +122,11 @@ int getUnavailableNoteIndexByPriority()
        return 0;
     }
 
-    return ARRAY_LENGTH(notes) -1;
+    return 3;
 }
 
 inline void applyNoteCV(Note note)
-{
+{  
     unsigned int noteMilliVolts = (unsigned int) ((float) note.midiNote * NOTE_2_MILLIVOLTS_FACTOR + 0.5);
 
     unsigned int command = note.dacChannel;
@@ -144,10 +142,11 @@ inline void applyNoteCV(Note note)
 }
 
 void handleNoteOff(byte channel, byte noteMsg, byte velocity) {
-    for(int i=0; i<ARRAY_LENGTH(notes); i++) {
-        if(notes[i].midiNote == noteMsg && notes[i].notePlayed)
+    byte note = noteMsg - MIDI_MSG_TO_NOTE_INDEX;
+    for(int i=0; i<4; i++) {
+        if(notes[i].midiNote == note)
         {
-           notes[i].notePlayed = false;
+           notes[i].midiNote = 0;
            digitalWrite(notes[i].gatePin, LOW);
         }
     }
